@@ -27,7 +27,7 @@ seLinuxContext:
 supplementalGroups:
   type: RunAsAny
 users:
-- system:serviceaccount:{{ .Release.Namespace }}:{{ .Values."ingress-nginx".serviceAccount.name }}
+- system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.config.serviceAccount.name }}
 volumes:
 - configMap
 - downwardAPI

@@ -6,7 +6,7 @@
 scc:
   enabled: true
 
-"ingress-nginx":
+config:
   serviceAccount:
     create: true
     name: nginx-controller  
