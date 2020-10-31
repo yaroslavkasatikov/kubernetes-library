@@ -1,0 +1,12 @@
+# Default values for nginx-ingress-controller.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Security Context Constraints for OpenShift
+scc:
+  enabled: true
+
+"ingress-nginx":
+  serviceAccount:
+    create: true
+    name: nginx-controller  
