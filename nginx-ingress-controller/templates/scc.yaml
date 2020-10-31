@@ -28,6 +28,7 @@ supplementalGroups:
   type: RunAsAny
 users:
 - system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.config.serviceAccount.name }}
+- system:serviceaccount:{{ .Release.Namespace }}:{{ .Release.Name }}-config-admission
 volumes:
 - configMap
 - downwardAPI
