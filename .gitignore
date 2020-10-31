@@ -1,4 +1,4 @@
 .project
-
+**/charts
 **/charts/*.tgz
 **/Chart.lock
