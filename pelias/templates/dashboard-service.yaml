@@ -1,0 +1,13 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+    name: pelias-dashboard-service
+spec:
+    selector:
+        app: pelias-dashboard
+    ports:
+        - protocol: TCP
+          port: 3030
+    type: ClusterIP 
+{{- end -}}

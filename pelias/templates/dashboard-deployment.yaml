@@ -1,0 +1,64 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pelias-dashboard
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  minReadySeconds: 1
+  selector:
+    matchLabels:
+      app: pelias-dashboard
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: pelias-dashboard
+    spec:
+      containers:
+        - name: pelias-dashboard
+          ports:
+          - containerPort: 3030
+            name: http
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /pelias
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /pelias
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          image: pelias/dashboard:{{ .Values.dashboard.dockerTag }}
+          env:
+            - name: ES_ENDPOINT
+              {{- if .Values.elasticsearch.auth }}
+              value: {{ .Values.elasticsearch.protocol }}://{{ .Values.elasticsearch.auth }}@{{ .Values.elasticsearch.host }}:{{ .Values.elasticsearch.port }}/
+              {{- else }}
+              value: {{ .Values.elasticsearch.protocol }}://{{ .Values.elasticsearch.host }}:{{ .Values.elasticsearch.port }}/
+              {{- end }}
+          resources:
+            limits:
+              memory: 0.2Gi
+              cpu: 0.25
+            requests:
+              memory: 0.2Gi
+              cpu: 0.01
+      nodeSelector:
+{{ toYaml .Values.dashboard.nodeSelector | indent 8 }}
+{{- end -}}
