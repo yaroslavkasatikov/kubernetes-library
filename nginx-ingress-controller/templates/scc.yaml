@@ -29,6 +29,7 @@ supplementalGroups:
 users:
 - system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.config.serviceAccount.name }}
 - system:serviceaccount:{{ .Release.Namespace }}:{{ .Release.Name }}-config-admission
+- system:serviceaccount:{{ .Release.Namespace }}:{{ .Release.Name }}-config-backend
 volumes:
 - configMap
 - downwardAPI
