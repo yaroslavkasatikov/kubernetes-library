@@ -23,5 +23,5 @@ appVersion: 0.40.2
 dependencies:
 - name: ingress-nginx
   alias: config
-  version: "3.7.1"
+  version: "3.8.0"
   repository: "https://kubernetes.github.io/ingress-nginx"
