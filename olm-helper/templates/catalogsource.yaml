@@ -1,0 +1,17 @@
+{{ if .Values.catalog.createCatalog }}
+{{ if .Values.catalog.createCatalogNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "{{ required .Values.catalog.namespace  }}"
+{{ end }}
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: "{{ required .Values.catalog.name  }}"
+  namespace: "{{ .Values.catalog.namespace | default 'openshift-marketplace'  }}"
+spec:
+{{ toYaml .Values.catalog.spec | indent 2 }}
+      
+{{ end }}

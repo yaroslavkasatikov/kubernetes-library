@@ -1,0 +1,45 @@
+# Default values for olm-subscription.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+operatorGroup:
+  create: true
+  
+# Namespace selector. Default if empty: OperatorGroup's namespace
+#  spec:
+#    selector:
+#      matchLabels:
+#        cool.io/prod: "true"
+#  
+#  or
+#  
+#  spec:
+#    targetNamespaces:
+#    - my-namespace
+#    - my-other-namespace
+#    - my-other-other-namespace
+
+  spec: {}
+  
+
+
+subscription:
+  package: null
+  channel: null
+
+
+catalog:
+  createCatalog: false
+  createCatalogNamespace: false
+  name: null 
+  namespace: openshift-marketplace
+
+# If create is true, create a CatalogSource with the following spec
+
+  spec: {}
+#    image: null
+#    displayName: null
+#    publisher: null
+#    updateStrategy:
+#      registryPoll: 
+#        interval: 30m  
