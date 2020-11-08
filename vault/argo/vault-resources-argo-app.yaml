@@ -13,12 +13,15 @@ spec:
 
   project: vault-advatys
   syncPolicy:
-    automated: {}
+    automated:
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
 
   source:
     repoURL: https://github.com/yaroslavkasatikov/kubernetes-library.git
     targetRevision: vault-pki
-    path: helm/vault-advatys/
+    path: vault/helm
     helm:
       releaseName: vault-advatys
 #      values: |
