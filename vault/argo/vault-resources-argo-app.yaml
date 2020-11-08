@@ -16,7 +16,7 @@ spec:
     automated: {}
 
   source:
-    repoURL: https://github.com/yaroslav/kubernetes-library.git
+    repoURL: https://github.com/yaroslavkasatikov/kubernetes-library.git
     targetRevision: vault-pki
     path: helm/vault-advatys/
     helm:
