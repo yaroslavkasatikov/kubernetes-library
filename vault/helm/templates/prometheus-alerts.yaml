@@ -1,0 +1,66 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    prometheus: alert-rules-{{ .Release.Name }}
+    role: alert-rules
+    vault-alerts: "true"
+  name: vault-alert-rules-{{ .Release.Name }}
+spec:
+  groups:
+  - name: vault.alert 
+    rules:
+    - alert: vaultIsSealed
+      annotations: 
+        message: vault {{` $labels.service `}} {{` $labels.service `}} is sealed 
+      expr: vault_sys_sealed != 0 
+      labels:
+        severity: info
+    - alert: vaultHighLatency
+      annotations:
+        message: vault {{` $labels.service `}} {{` $labels.namespace `}}  latancy is too high
+      expr: max(vault_route{quantile="0.99" }) by (namespace, service) > 0.01
+      labels:
+        severity: info
+    - alert: vaultMemoryAlert-60
+      annotations:
+        message: vault {{ .Release.Name }} - {{ .Release.Namespace }} ( POD  {{` $labels.pod `}} ) uses  memory limit more than 60% 
+      expr: sum(container_memory_working_set_bytes{namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*", container != "", container != "POD"}) by (pod) / sum(kube_pod_container_resource_limits_memory_bytes{namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) * 100 > 60
+      labels:
+        severity: high
+    - alert: vaultMemoryAlert-75
+      annotations:
+        message: vault {{ .Release.Name }} - {{ .Release.Namespace }} ( POD  {{` $labels.pod `}} ) uses  memory limit more than 75%
+      expr: sum(container_memory_working_set_bytes{namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*", container != "", container != "POD"}) by (pod) / sum(kube_pod_container_resource_limits_memory_bytes{namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) * 100 > 75
+      labels:
+        severity: critical
+    - alert: vaultCPUAlert-60
+      annotations:
+        message: vault {{ .Release.Name }} - {{ .Release.Namespace }} ( POD  {{` $labels.pod `}} ) uses  cpu limit more than 60%
+      expr: sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{  namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) / sum(kube_pod_container_resource_limits_cpu_cores{ namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) *100 > 60
+      labels:
+        severity: high
+    - alert: vaultCPUAlert-75
+      annotations:
+        message: vault {{ .Release.Name }} - {{ .Release.Namespace }} ( POD  {{` $labels.pod `}} ) uses  cpu limit more than 75%
+      expr: sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{  namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) / sum(kube_pod_container_resource_limits_cpu_cores{ namespace="{{ .Release.Namespace }}", pod=~"{{ .Release.Name }}-[0-9]*"}) by (pod) *100 > 75
+      labels:
+        severity: critical
+
+    - alert: vaultIsuninitialized
+      annotations:
+        message: vault {{` $labels.service `}} {{` $labels.service `}} is uninitialized.
+      expr: vault_sys_initialized != 1
+      labels:
+        severity: high
+
+    - alert: vaultClusterIsUnavailable
+      annotations:
+        message: vault {{` $labels.instance `}} is unavailable!
+      expr: probe_success != 1
+      labels:
+        severity: critical
+
+
+
+        

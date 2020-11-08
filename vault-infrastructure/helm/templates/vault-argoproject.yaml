@@ -1,0 +1,17 @@
+{{- if .Values.vaultoperator.argocdConfig.project.create }}
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .Values.vaultoperator.argocdConfig.project.name }}
+  namespace: {{ .Values.vaultoperator.argocdConfig.namespace }}
+spec:
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  destinations:
+  - namespace: '*'
+    server: '*'
+  sourceRepos:
+  - '*'
+
+{{- end }}

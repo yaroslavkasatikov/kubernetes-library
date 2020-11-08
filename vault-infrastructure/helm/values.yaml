@@ -1,0 +1,18 @@
+
+    
+vaultoperator:
+  argocdConfig:
+    namespace: argocd
+    targetCluster: "https://kubernetes.default.svc"
+    project: 
+      createProject: false 
+      name: default
+
+   
+grafana:
+  argocdConfig:
+    namespace: argocd
+    targetCluster: "https://kubernetes.default.svc"
+    project: 
+      createProject: false 
+      name: default

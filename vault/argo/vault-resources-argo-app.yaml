@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+
+  name: vault-advatys
+  namespace: argocd 
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: vault-advatys
+    server: https://kubernetes.default.svc
+
+  project: vault-advatys
+  syncPolicy:
+    automated: {}
+
+  source:
+    repoURL: https://github.com/yaroslav/kubernetes-library.git
+    targetRevision: vault-pki
+    path: helm/vault-advatys/
+    helm:
+      releaseName: vault-advatys
+#      values: |
+#        ---
+#        watchNamespace: vault-superproject 

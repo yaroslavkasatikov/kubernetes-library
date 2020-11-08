@@ -1,0 +1,160 @@
+apiVersion: vault.banzaicloud.com/v1alpha1
+kind: Vault
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    vault_cr: {{ .Release.Name }}
+  name: {{ .Release.Name }}
+spec:
+  annotations:
+    common/annotation: "true"
+  bankVaultsImage: banzaicloud/bank-vaults:latest
+  caNamespaces:
+  - vswh
+  config:
+    api_addr: https://{{ .Release.Name }}.{{ .Release.Namespace }}.{{ .Release.Namespace }}:8200
+    cluster_addr: https://${.Env.POD_NAME}:8201
+    disable_mlock: true
+    listener:
+      tcp:
+        address: 0.0.0.0:8200
+        tls_disable: true
+    storage:
+      raft:
+        path: /vault/file
+    telemetry:
+      statsd_address: localhost:9125
+    ui: true
+  credentialsConfig:
+    env: ""
+    path: ""
+    secretName: ""
+  envsConfig: null
+  etcdSize: 0
+  etcdVersion: ""
+  externalConfig:
+    auth:
+    - roles:
+      - bound_service_account_names:
+        - default
+        - vault-secrets-webhook
+        bound_service_account_namespaces:
+        - default
+        - vswh
+        - cert-manager
+        name: default
+        policies: allow_secrets
+        ttl: 1h
+      type: kubernetes
+    policies:
+    - name: allow_secrets
+      rules: path "*" { capabilities = ["create", "read", "update", "delete",
+        "list"] }
+    secrets:
+    - description: General secrets.
+      options:
+        version: 2
+      path: secret
+      type: kv
+    - type: pki
+      description: General PKI.
+      config:
+        default_lease_ttl: 1680h
+        max_lease_ttl: 7200h
+      configuration:
+        config:
+        - name: urls
+          issuing_certificates: https://{{ .Release.Name }}.{{ .Release.Namespace }}.svc:8200/v1/pki/ca
+          crl_distribution_points: https://{{ .Release.Name }}.{{ .Release.Namespace }}:8200/v1/pki/crl
+        root/generate:
+        - name: internal
+          common_name: gcp.aws-openshift.club
+        roles:
+        - name: default
+          allowed_domains: localhost,pod,svc,default,gcp.aws-openshift.club
+          allow_subdomains: true
+          generate_lease: true
+          ttl: 30m
+
+    startupSecrets:
+    - data:
+        data:
+          AWS_ACCESS_KEY_ID: secretId
+          AWS_SECRET_ACCESS_KEY: s3cr3t
+      path: secret/data/accounts/aws
+      type: kv
+    - data:
+        data:
+          DOCKER_REPO_PASSWORD: dockerrepopassword
+          DOCKER_REPO_USER: dockerrepouser
+      path: secret/data/dockerrepo
+      type: kv
+    - data:
+        data:
+          MYSQL_ROOT_PASSWORD: s3cr3t
+      path: secret/data/mysql
+      type: kv
+  fluentdConfig: ""
+  fluentdEnabled: false
+  fluentdImage: ""
+  image: vault:1.4.2
+  ingress:
+    spec: {}
+  nodeAffinity: {}
+  nodeSelector: null
+  podAntiAffinity: ""
+  raftLeaderAddress: ""
+  resources: {}
+  securityContext: 
+    fsGroup: {{ .Values.fsGroup }}
+  serviceAccount: vault-{{ .Release.Name }}
+  serviceMonitorEnabled: false
+  servicePorts: null
+  serviceType: ClusterIP
+  size: {{ .Values.size | default 3 }}
+  statsdDisabled: false
+  statsdImage: ""
+  tolerations: null
+  unsealConfig:
+    kubernetes:
+      secretName: ""
+      secretNamespace: {{ .Release.Namespace }}
+    options:
+      preFlightChecks: true
+  vaultAnnotations:
+    type/instance: vault
+  vaultConfigurerAnnotations:
+    type/instance: vaultconfigurer
+  vaultConfigurerLabels:
+    example.com/log-format: string
+  vaultConfigurerPodSpec:
+    containers: null
+  vaultEnvsConfig:
+  - name: VAULT_LOG_LEVEL
+    value: debug
+  - name: SKIP_SETCAP
+    value: "true"
+  - name: SKIP_CHOWN
+    value: "true"
+  vaultLabels:
+    example.com/log-format: json
+  vaultPodSpec:
+    containers: null
+  veleroFsfreezeImage: ""
+  volumeClaimTemplates:
+  - metadata:
+      creationTimestamp: null
+      name: {{ .Release.Name }}
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.volumeSize | default "1Gi" }}
+      volumeMode: Filesystem
+    status: {}
+  volumeMounts:
+  - mountPath: /vault/file
+    name: {{ .Release.Name }}
+  watchedSecretsAnnotations: null
+  watchedSecretsLabels: null

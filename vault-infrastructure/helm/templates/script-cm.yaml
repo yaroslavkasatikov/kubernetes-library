@@ -1,0 +1,18 @@
+apiVersion: v1
+data:
+  grafana_datasource_init.sh: "#!/bin/bash\nwget https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+    -O /tmp/jq\nchmod +x /tmp/jq\n\nTOKEN=$(oc get secret -n {{ .Release.Namespace }}  $(oc get sa
+    -n {{ .Release.Namespace }} vault-dashboard-{{ .Release.Name }}-grafana -o json|/tmp/jq .secrets|grep token|awk '{print $2}'|sed 's/\"//g')
+    -o json|/tmp/jq .data.token|sed 's/\"//g'|base64 -d)\n\n\nprintf \"apiVersion:
+    1\\ndatasources:\\n- name: Prometheus-k8s\\n  type: prometheus\\n  url: https://prometheus-k8s.openshift-monitoring.svc:9091\\n
+    \ access: proxy\\n  isDefault: false\\n  jsonData:\\n    tlsSkipVerify: true\\n
+    \   httpHeaderName1: 'Authorization'\\n  secureJsonData:\\n    httpHeaderValue1:
+    'Bearer $TOKEN'\\n- name: thanos-querier-k8s\\n  type: prometheus\\n  url: https://thanos-querier.openshift-monitoring.svc:9091\\n
+    \ access: proxy\\n  isDefault: false\\n  jsonData:\\n    tlsSkipVerify: true\\n
+    \   httpHeaderName1: 'Authorization'\\n  secureJsonData:\\n    httpHeaderValue1:
+    'Bearer $TOKEN'\\n\" > /etc/grafana/provisioning/datasources/datasources.yaml
+    \n\n"
+kind: ConfigMap
+metadata:
+  name: script
+  namespace: {{ .Release.Namespace }}

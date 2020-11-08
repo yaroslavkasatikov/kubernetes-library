@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: resource-locker-operator
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://redhat-cop.github.io/resource-locker-operator'
+    targetRevision: v0.1.5 
+    chart: resource-locker-operator 
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: resource-locker-operator 
+  syncPolicy:
+    automated:
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+

@@ -1,0 +1,7 @@
+# temporary you need to get allowed uid from the NS and put it here until https://github.com/banzaicloud/bank-vaults/issues/1027
+fsGroup: 1000700000
+
+# size: 3
+# volumeSize: 1Gi
+#
+

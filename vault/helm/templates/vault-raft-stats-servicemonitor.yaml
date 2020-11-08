@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    prometheus: kube-prometheus
+  name: vault-statsd-{{ .Release.Name }}
+spec:
+  endpoints:
+  - interval: 30s
+    port: statsd
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+      global_service: "true"
+      vault_cr: {{ .Release.Name }}
+

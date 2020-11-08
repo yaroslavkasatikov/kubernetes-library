@@ -1,0 +1,3078 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: "{{ .Release.Name }}-grafana"
+  namespace: {{ .Values.grafana.argocdConfig.namespace }}
+  
+spec:
+  destination:
+    namespace: {{ .Release.Namespace }}
+    server: {{ .Values.grafana.argocdConfig.targetCluster }}
+
+  project: {{ .Values.grafana.argocdConfig.project.name }}
+  syncPolicy:
+    automated: {}
+
+  source:
+    repoURL: https://github.com/helm/charts.git
+    targetRevision: master
+    path:  stable/grafana
+    helm:
+      releaseName: vault-dashboard-{{ .Release.Name }}
+      values: |
+        ---
+        rbac:
+          create: true
+          pspEnabled: false
+          pspUseAppArmor: true
+          namespaced: true
+          extraRoleRules: []
+          # - apiGroups: []
+          #   resources: []
+          #   verbs: []
+          extraClusterRoleRules: []
+          # - apiGroups: []
+          #   resources: []
+          #   verbs: []
+        serviceAccount:
+          create: true
+          name:
+          nameTest:
+        #  annotations:
+        
+        replicas: 1
+        
+        ## See `kubectl explain poddisruptionbudget.spec` for more
+        ## ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+        podDisruptionBudget: {}
+        #  minAvailable: 1
+        #  maxUnavailable: 1
+        
+        ## See `kubectl explain deployment.spec.strategy` for more
+        ## ref: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+        deploymentStrategy:
+          type: Recreate
+        
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+        
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 10
+        
+        ## Use an alternate scheduler, e.g. "stork".
+        ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+        ##
+        # schedulerName: "default-scheduler"
+        
+        image:
+          repository: grafana/grafana
+          tag: 7.0.3
+          pullPolicy: IfNotPresent
+        
+          ## Optionally specify an array of imagePullSecrets.
+          ## Secrets must be manually created in the namespace.
+          ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+          ##
+          # pullSecrets:
+          #   - myRegistrKeySecretName
+        
+        testFramework:
+          enabled: true
+          image: "bats/bats"
+          tag: "v1.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext: {}
+        
+        securityContext: ""
+        
+        
+        extraConfigmapMounts:
+          - name: script
+            mountPath: /script
+            configMap: script
+            readOnly: true
+        
+        
+        extraEmptyDirMounts:
+          - name: datasources
+            mountPath: /etc/grafana/provisioning/datasources/ 
+        
+        
+        ## Assign a PriorityClassName to pods if set
+        # priorityClassName:
+        
+        downloadDashboardsImage:
+          repository: curlimages/curl
+          tag: 7.70.0
+          pullPolicy: IfNotPresent
+        
+        downloadDashboards:
+          env: {}
+          resources: {}
+        
+        ## Pod Annotations
+        # podAnnotations: {}
+        
+        ## Pod Labels
+        # podLabels: {}
+        
+        podPortName: grafana
+        
+        ## Deployment annotations
+        # annotations: {}
+        
+        ## Expose the grafana service to be accessed from outside the cluster (LoadBalancer service).
+        ## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.
+        ## ref: http://kubernetes.io/docs/user-guide/services/
+        ##
+        service:
+          type: ClusterIP
+          port: 80
+          targetPort: 3000
+            # targetPort: 4181 To be used with a proxy extraContainer
+          annotations: {}
+          labels: {}
+          portName: service
+        
+        extraExposePorts: []
+         # - name: keycloak
+         #   port: 8080
+         #   targetPort: 8080
+         #   type: ClusterIP
+        
+        ingress:
+          enabled: true
+          # Values can be templated
+          annotations: {}
+            # kubernetes.io/ingress.class: nginx
+            # kubernetes.io/tls-acme: "true"
+          labels: {}
+          path: /
+          hosts:
+            - cluster-grafana.apps.hub.gcp.aws-openshift.club
+          ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
+          extraPaths: []
+          # - path: /*
+          #   backend:
+          #     serviceName: ssl-redirect
+          #     servicePort: use-annotation
+          tls: []
+          #  - secretName: chart-example-tls
+          #    hosts:
+          #      - chart-example.local
+        
+        resources: {}
+        #  limits:
+        #    cpu: 100m
+        #    memory: 128Mi
+        #  requests:
+        #    cpu: 100m
+        #    memory: 128Mi
+        
+        ## Node labels for pod assignment
+        ## ref: https://kubernetes.io/docs/user-guide/node-selection/
+        #
+        nodeSelector: {}
+        
+        ## Tolerations for pod assignment
+        ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+        ##
+        tolerations: []
+        
+        ## Affinity for pod assignment
+        ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+        ##
+        affinity: {}
+        
+        extraInitContainers:
+        - command:
+          - /bin/bash 
+          - /script/grafana_datasource_init.sh
+          image: openshift/origin-cli:latest
+          imagePullPolicy: IfNotPresent
+          name: datasourceinit
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /script/
+            name: script
+          - mountPath: /etc/grafana/provisioning/datasources
+            name: datasources
+        
+        
+        ## Enable an Specify container in extraContainers. This is meant to allow adding an authentication proxy to a grafana pod
+        extraContainers: |
+        # - name: proxy
+        #   image: quay.io/gambol99/keycloak-proxy:latest
+        #   args:
+        #   - -provider=github
+        #   - -client-id=
+        #   - -client-secret=
+        #   - -github-org=<ORG_NAME>
+        #   - -email-domain=*
+        #   - -cookie-secret=
+        #   - -http-address=http://0.0.0.0:4181
+        #   - -upstream-url=http://127.0.0.1:3000
+        #   ports:
+        #     - name: proxy-web
+        #       containerPort: 4181
+        
+        ## Volumes that can be used in init containers that will not be mounted to deployment pods
+        extraContainerVolumes: []
+        #  - name: volume-from-secret
+        #    secret:
+        #      secretName: secret-to-mount
+        #  - name: empty-dir-volume
+        #    emptyDir: {}
+        
+        ## Enable persistence using Persistent Volume Claims
+        ## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+        ##
+        persistence:
+          type: pvc
+          enabled: true
+          # storageClassName: default
+          accessModes:
+            - ReadWriteOnce
+          size: 10Gi
+          # annotations: {}
+          finalizers:
+            - kubernetes.io/pvc-protection
+          # subPath: ""
+          # existingClaim:
+        
+        initChownData:
+          ## If false, data ownership will not be reset at startup
+          ## This allows the prometheus-server to be run with an arbitrary user
+          ##
+          enabled: false
+        
+          ## initChownData container image
+          ##
+          image:
+            repository: busybox
+            tag: "1.31.1"
+            pullPolicy: IfNotPresent
+        
+          ## initChownData resource requests and limits
+          ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
+          ##
+          resources: {}
+          #  limits:
+          #    cpu: 100m
+          #    memory: 128Mi
+          #  requests:
+          #    cpu: 100m
+          #    memory: 128Mi
+        
+        
+        # Administrator credentials when not using an existing secret (see below)
+        adminUser: admin
+        # adminPassword: strongpassword
+        
+        # Use an existing secret for the admin user.
+        admin:
+          existingSecret: ""
+          userKey: admin-user
+          passwordKey: admin-password
+        
+        ## Define command to be executed at startup by grafana container
+        ## Needed if using `vault-env` to manage secrets (ref: https://banzaicloud.com/blog/inject-secrets-into-pods-vault/)
+        ## Default is "run.sh" as defined in grafana's Dockerfile
+        # command:
+        # - "sh"
+        # - "/run.sh"
+        
+        ## Use an alternate scheduler, e.g. "stork".
+        ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+        ##
+        # schedulerName:
+        
+        ## Extra environment variables that will be pass onto deployment pods
+        env: {}
+        
+        ## "valueFrom" environment variable references that will be added to deployment pods
+        ## ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvarsource-v1-core
+        ## Renders in container spec as:
+        ##   env:
+        ##     ...
+        ##     - name: <key>
+        ##       valueFrom:
+        ##         <value rendered as YAML>
+        envValueFrom: {}
+        
+        ## The name of a secret in the same kubernetes namespace which contain values to be added to the environment
+        ## This can be useful for auth tokens, etc. Value is templated.
+        envFromSecret: ""
+        
+        ## Sensible environment variables that will be rendered as new secret object
+        ## This can be useful for auth tokens, etc
+        envRenderSecret: {}
+        
+        ## Additional grafana server secret mounts
+        # Defines additional mounts with secrets. Secrets must be manually created in the namespace.
+        extraSecretMounts: []
+          # - name: secret-files
+          #   mountPath: /etc/secrets
+          #   secretName: grafana-secret-files
+          #   readOnly: true
+          #   subPath: ""
+        
+        ## Additional grafana server volume mounts
+        # Defines additional volume mounts.
+        extraVolumeMounts: []
+          # - name: extra-volume
+          #   mountPath: /mnt/volume
+          #   readOnly: true
+          #   existingClaim: volume-claim
+        
+        ## Pass the plugins you want installed as a list.
+        ##
+        plugins: []
+          # - digrich-bubblechart-panel
+          # - grafana-clock-panel
+        
+        ## Configure grafana datasources
+        ## ref: http://docs.grafana.org/administration/provisioning/#datasources
+        ##
+        datasources: {} 
+        #  datasources.yaml:
+        #    apiVersion: 1
+        #    datasources:
+        #    - name: Prometheus-k8s
+        #      type: prometheus
+        #      url: https://prometheus-k8s.openshift-monitoring.svc:9091
+        #      access: proxy
+        #      isDefault: false
+        #      jsonData:
+        #        tlsSkipVerify: true 
+        #        httpHeaderName1: 'Authorization'
+        #      secureJsonData:
+        #        httpHeaderValue1: 'Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Im94Mkk2TjNRTk1kWjd1b3ZtcDA3UVBPUHUyeHlmOEV2ZHdTSWRqbFJjdTAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJncmFmYW5hIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImdyYWZhbmEtdG9rZW4tcmNybTUiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZ3JhZmFuYSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjFlMGE1MWU2LTUyM2YtNDcyZS1hZWFiLTM4ZDFiYjZmZWFiYyIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpncmFmYW5hOmdyYWZhbmEifQ.BKxBPrtQHhKgORdjChsSPSPKBzgovmQ3wbDbrE6PSEzclvEuTHnmwoWR33Mq7Zwn-OYrGZS3-elJGpj4JObFHJCRTvwCOLGPp1751p4gEaQ4Xufr8H4xhWy_Hy8I5UcFRP_XQDYHPVZ8iPwtl7-aiLi_5HPq0c6SRw8LXAswH2QrfSPUEqPMINs3C1tS8Fc_rJuGwuS6G0GiyTjde-aNZMuP6sKAo0e5ZK7FNueZfVc0niWW5NScCX4d19teuTI3TO-EorrlV7adw4o4S2oyBqa87rYuCJOP_LiBp1XE-nTAcNrKwzqbM4kOe2fn8XWAlyxP5M04PPbxcoq8GDHXMA' 
+        #    - name: thanos-querier-k8s
+        #      type: prometheus
+        #      url: https://thanos-querier.openshift-monitoring.svc:9091
+        #      access: proxy
+        #      isDefault: false
+        #      jsonData:
+        #        tlsSkipVerify: true
+        #        httpHeaderName1: 'Authorization'
+        #      secureJsonData:
+        #        httpHeaderValue1: 'Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Im94Mkk2TjNRTk1kWjd1b3ZtcDA3UVBPUHUyeHlmOEV2ZHdTSWRqbFJjdTAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJncmFmYW5hIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImdyYWZhbmEtdG9rZW4tcmNybTUiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZ3JhZmFuYSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjFlMGE1MWU2LTUyM2YtNDcyZS1hZWFiLTM4ZDFiYjZmZWFiYyIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpncmFmYW5hOmdyYWZhbmEifQ.BKxBPrtQHhKgORdjChsSPSPKBzgovmQ3wbDbrE6PSEzclvEuTHnmwoWR33Mq7Zwn-OYrGZS3-elJGpj4JObFHJCRTvwCOLGPp1751p4gEaQ4Xufr8H4xhWy_Hy8I5UcFRP_XQDYHPVZ8iPwtl7-aiLi_5HPq0c6SRw8LXAswH2QrfSPUEqPMINs3C1tS8Fc_rJuGwuS6G0GiyTjde-aNZMuP6sKAo0e5ZK7FNueZfVc0niWW5NScCX4d19teuTI3TO-EorrlV7adw4o4S2oyBqa87rYuCJOP_LiBp1XE-nTAcNrKwzqbM4kOe2fn8XWAlyxP5M04PPbxcoq8GDHXMA' 
+        
+        
+        ## Configure notifiers
+        ## ref: http://docs.grafana.org/administration/provisioning/#alert-notification-channels
+        ##
+        notifiers: {}
+        #  notifiers.yaml:
+        #    notifiers:
+        #    - name: email-notifier
+        #      type: email
+        #      uid: email1
+        #      # either:
+        #      org_id: 1
+        #      # or
+        #      org_name: Main Org.
+        #      is_default: true
+        #      settings:
+        #        addresses: an_email_address@example.com
+        #    delete_notifiers:
+        
+        ## Configure grafana dashboard providers
+        ## ref: http://docs.grafana.org/administration/provisioning/#dashboards
+        ##
+        ## `path` must be /var/lib/grafana/dashboards/<provider_name>
+        ##
+        dashboardProviders: 
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+            - name: 'default'
+              orgId: 1
+              folder: ''
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/default
+        
+        ## Configure grafana dashboard to import
+        ## NOTE: To use dashboards you must also enable/configure dashboardProviders
+        ## ref: https://grafana.com/dashboards
+        ##
+        ## dashboards per provider, use provider name as key.
+        ##
+        dashboards: 
+          default:
+          #   some-dashboard:
+          #     json: |
+          #       $RAW_JSON
+            vault-dashboard:
+              json: |
+                {
+                  "annotations": {
+                    "list": [
+                      {
+                        "builtIn": 1,
+                        "datasource": "thanos-querier-k8s",
+                        "enable": true,
+                        "hide": true,
+                        "iconColor": "rgba(0, 211, 255, 1)",
+                        "name": "Annotations & Alerts",
+                        "type": "dashboard"
+                      }
+                    ]
+                  },
+                  "description": " ",
+                  "editable": true,
+                  "gnetId": 7700,
+                  "graphTooltip": 0,
+                  "iteration": 1597430318131,
+                  "links": [],
+                  "panels": [
+                    {
+                      "datasource": "thanos-querier-k8s",
+                      "gridPos": {
+                        "h": 1,
+                        "w": 24,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "id": 41,
+                      "title": "Row title",
+                      "type": "row"
+                    },
+                    {
+                      "content": "<img src=\"https://adinermie.com/wp-content/uploads/2019/08/HashiVault.png\" alt=\"info\" />",
+                      "datasource": "thanos-querier-k8s",
+                      "description": "",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 4,
+                        "x": 0,
+                        "y": 1
+                      },
+                      "id": 22,
+                      "links": [
+                        {
+                          "url": "/"
+                        }
+                      ],
+                      "mode": "html",
+                      "title": "",
+                      "transparent": true,
+                      "type": "text"
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": true,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 9,
+                        "w": 10,
+                        "x": 4,
+                        "y": 1
+                      },
+                      "hiddenSeries": false,
+                      "id": 24,
+                      "legend": {
+                        "alignAsTable": true,
+                        "avg": false,
+                        "current": true,
+                        "hideEmpty": false,
+                        "hideZero": false,
+                        "max": true,
+                        "min": true,
+                        "rightSide": false,
+                        "show": true,
+                        "sort": "avg",
+                        "sortDesc": true,
+                        "total": false,
+                        "values": true
+                      },
+                      "lines": false,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(idelta(vault_route_count{method=~\"create|delete|renew\", service=\"$vaultClusterName\"}[5m])) by (method, path)",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": " method :path",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Modify by Path",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 2,
+                        "value_type": "individual"
+                      },
+                      "transparent": true,
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": true,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 9,
+                        "w": 10,
+                        "x": 14,
+                        "y": 1
+                      },
+                      "hiddenSeries": false,
+                      "id": 35,
+                      "legend": {
+                        "alignAsTable": true,
+                        "avg": true,
+                        "current": false,
+                        "max": true,
+                        "min": true,
+                        "rightSide": false,
+                        "show": true,
+                        "sort": "avg",
+                        "sortDesc": true,
+                        "total": false,
+                        "values": true
+                      },
+                      "lines": false,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(idelta(vault_route_count{method=~\"read\",service=\"$vaultClusterName\"}[5m])) by (method, path)",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": " method :path",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Read by Path",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 2,
+                        "value_type": "individual"
+                      },
+                      "transparent": true,
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": "0",
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "cacheTimeout": null,
+                      "colorBackground": false,
+                      "colorValue": true,
+                      "colors": [
+                        "#299c46",
+                        "#629e51",
+                        "#d44a3a"
+                      ],
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "format": "none",
+                      "gauge": {
+                        "maxValue": 100,
+                        "minValue": 0,
+                        "show": false,
+                        "thresholdLabels": false,
+                        "thresholdMarkers": true
+                      },
+                      "gridPos": {
+                        "h": 2,
+                        "w": 4,
+                        "x": 0,
+                        "y": 6
+                      },
+                      "id": 25,
+                      "interval": null,
+                      "links": [],
+                      "mappingType": 1,
+                      "mappingTypes": [
+                        {
+                          "name": "value to text",
+                          "value": 1
+                        },
+                        {
+                          "name": "range to text",
+                          "value": 2
+                        }
+                      ],
+                      "maxDataPoints": 100,
+                      "nullPointMode": "connected",
+                      "nullText": null,
+                      "postfix": "",
+                      "postfixFontSize": "50%",
+                      "prefix": "",
+                      "prefixFontSize": "50%",
+                      "rangeMaps": [
+                        {
+                          "from": "null",
+                          "text": "N/A",
+                          "to": "null"
+                        }
+                      ],
+                      "sparkline": {
+                        "fillColor": "rgba(31, 118, 189, 0.18)",
+                        "full": false,
+                        "lineColor": "rgb(31, 120, 193)",
+                        "show": false
+                      },
+                      "tableColumn": "",
+                      "targets": [
+                        {
+                          "expr": "avg(avg_over_time(vault_sys_sealed{}[15s]))",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": "0,1",
+                      "title": "",
+                      "transparent": true,
+                      "type": "singlestat",
+                      "valueFontSize": "100%",
+                      "valueMaps": [
+                        {
+                          "op": "=",
+                          "text": "N/A",
+                          "value": "null"
+                        },
+                        {
+                          "op": "=",
+                          "text": "UNSEALED",
+                          "value": "0"
+                        },
+                        {
+                          "op": "=",
+                          "text": "SEALD",
+                          "value": "1"
+                        }
+                      ],
+                      "valueName": "current"
+                    },
+                    {
+                      "cacheTimeout": null,
+                      "colorBackground": false,
+                      "colorValue": true,
+                      "colors": [
+                        "#299c46",
+                        "#e24d42",
+                        "#7eb26d"
+                      ],
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "format": "none",
+                      "gauge": {
+                        "maxValue": 100,
+                        "minValue": 0,
+                        "show": false,
+                        "thresholdLabels": false,
+                        "thresholdMarkers": true
+                      },
+                      "gridPos": {
+                        "h": 2,
+                        "w": 4,
+                        "x": 0,
+                        "y": 8
+                      },
+                      "id": 37,
+                      "interval": null,
+                      "links": [],
+                      "mappingType": 1,
+                      "mappingTypes": [
+                        {
+                          "name": "value to text",
+                          "value": 1
+                        },
+                        {
+                          "name": "range to text",
+                          "value": 2
+                        }
+                      ],
+                      "maxDataPoints": 100,
+                      "nullPointMode": "connected",
+                      "nullText": null,
+                      "postfix": "",
+                      "postfixFontSize": "50%",
+                      "prefix": "",
+                      "prefixFontSize": "50%",
+                      "rangeMaps": [
+                        {
+                          "from": "null",
+                          "text": "N/A",
+                          "to": "null"
+                        }
+                      ],
+                      "sparkline": {
+                        "fillColor": "rgba(31, 118, 189, 0.18)",
+                        "full": false,
+                        "lineColor": "rgb(31, 120, 193)",
+                        "show": false
+                      },
+                      "tableColumn": "",
+                      "targets": [
+                        {
+                          "expr": "avg(avg_over_time(vault_sys_initialized{}[15s]))",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": "0,1",
+                      "title": "",
+                      "transparent": true,
+                      "type": "singlestat",
+                      "valueFontSize": "50%",
+                      "valueMaps": [
+                        {
+                          "op": "=",
+                          "text": "N/A",
+                          "value": "null"
+                        },
+                        {
+                          "op": "=",
+                          "text": "UNINITIALISED",
+                          "value": "0"
+                        },
+                        {
+                          "op": "=",
+                          "text": "INITIALISED",
+                          "value": "1"
+                        }
+                      ],
+                      "valueName": "current"
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 7,
+                        "w": 10,
+                        "x": 4,
+                        "y": 10
+                      },
+                      "hiddenSeries": false,
+                      "id": 48,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 2,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(rate(vault_route_count{service=\"$vaultClusterName\"}[1m]))",
+                          "interval": "",
+                          "legendFormat": "requests",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "QPS",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 7,
+                        "w": 10,
+                        "x": 14,
+                        "y": 10
+                      },
+                      "hiddenSeries": false,
+                      "id": 49,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 2,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "max(vault_route{quantile=\"0.99\", service=\"$vaultClusterName\"}) ",
+                          "interval": "",
+                          "legendFormat": "seconds",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Latency",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "collapsed": false,
+                      "datasource": "thanos-querier-k8s",
+                      "gridPos": {
+                        "h": 1,
+                        "w": 24,
+                        "x": 0,
+                        "y": 17
+                      },
+                      "id": 16,
+                      "panels": [],
+                      "title": "Token",
+                      "type": "row"
+                    },
+                    {
+                      "cacheTimeout": null,
+                      "colorBackground": false,
+                      "colorValue": true,
+                      "colors": [
+                        "#299c46",
+                        "rgba(237, 129, 40, 0.89)",
+                        "#d44a3a"
+                      ],
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "format": "none",
+                      "gauge": {
+                        "maxValue": 100,
+                        "minValue": 0,
+                        "show": false,
+                        "thresholdLabels": false,
+                        "thresholdMarkers": true
+                      },
+                      "gridPos": {
+                        "h": 6,
+                        "w": 4,
+                        "x": 0,
+                        "y": 18
+                      },
+                      "id": 8,
+                      "interval": null,
+                      "links": [],
+                      "mappingType": 1,
+                      "mappingTypes": [
+                        {
+                          "name": "value to text",
+                          "value": 1
+                        },
+                        {
+                          "name": "range to text",
+                          "value": 2
+                        }
+                      ],
+                      "maxDataPoints": 100,
+                      "nullPointMode": "connected",
+                      "nullText": null,
+                      "postfix": "",
+                      "postfixFontSize": "50%",
+                      "prefix": "",
+                      "prefixFontSize": "50%",
+                      "rangeMaps": [
+                        {
+                          "from": "null",
+                          "text": "N/A",
+                          "to": "null"
+                        }
+                      ],
+                      "sparkline": {
+                        "fillColor": "rgba(31, 118, 189, 0.18)",
+                        "full": false,
+                        "lineColor": "rgb(31, 120, 193)",
+                        "show": true
+                      },
+                      "tableColumn": "",
+                      "targets": [
+                        {
+                          "expr": "vault_token_create_count-vault_token_store_count",
+                          "format": "time_series",
+                          "intervalFactor": 1,
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": "1,3",
+                      "title": "Pending Tokens",
+                      "type": "singlestat",
+                      "valueFontSize": "80%",
+                      "valueMaps": [
+                        {
+                          "op": "=",
+                          "text": "N/A",
+                          "value": "null"
+                        }
+                      ],
+                      "valueName": "current"
+                    },
+                    {
+                      "aliasColors": {
+                        "Lookup": "#0a50a1"
+                      },
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 10,
+                        "x": 4,
+                        "y": 18
+                      },
+                      "hiddenSeries": false,
+                      "id": 14,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "rate(vault_token_lookup_count{ service=\"$vaultClusterName\"}[1m])",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "Lookup",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Token Lookup",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": "0",
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "aliasColors": {
+                        "Create": "rgb(84, 183, 90)",
+                        "Store": "#0a437c"
+                      },
+                      "bars": true,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 10,
+                        "x": 14,
+                        "y": 18
+                      },
+                      "hiddenSeries": false,
+                      "id": 6,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": false,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "vault_token_create_count{service=\"$vaultClusterName\"}",
+                          "format": "time_series",
+                          "instant": false,
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "Create",
+                          "refId": "A"
+                        },
+                        {
+                          "expr": "vault_token_store_count",
+                          "format": "time_series",
+                          "instant": false,
+                          "intervalFactor": 2,
+                          "legendFormat": "Store",
+                          "refId": "B"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Token",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "collapsed": false,
+                      "datasource": "thanos-querier-k8s",
+                      "gridPos": {
+                        "h": 1,
+                        "w": 24,
+                        "x": 0,
+                        "y": 24
+                      },
+                      "id": 20,
+                      "panels": [],
+                      "title": "Audit",
+                      "type": "row"
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 14,
+                        "x": 0,
+                        "y": 25
+                      },
+                      "hiddenSeries": false,
+                      "id": 4,
+                      "legend": {
+                        "alignAsTable": true,
+                        "avg": true,
+                        "current": true,
+                        "hideEmpty": true,
+                        "hideZero": false,
+                        "max": true,
+                        "min": true,
+                        "rightSide": true,
+                        "show": true,
+                        "total": false,
+                        "values": true
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(irate(vault_audit_log_request_count{ service=\"$vaultClusterName\"} [1m]))",
+                          "format": "time_series",
+                          "instant": false,
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "Request ",
+                          "refId": "A"
+                        },
+                        {
+                          "expr": "sum(irate(vault_audit_log_response_count{ service=\"$vaultClusterName\"} [1m]))",
+                          "format": "time_series",
+                          "instant": false,
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "Response",
+                          "refId": "B"
+                        },
+                        {
+                          "expr": "sum(irate(vault_core_handle_request_count{ service=\"$vaultClusterName\" } [1m]))",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "Handled",
+                          "refId": "C"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Audit Log Request",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": "0",
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": true,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 10,
+                        "x": 14,
+                        "y": 25
+                      },
+                      "hiddenSeries": false,
+                      "id": 36,
+                      "legend": {
+                        "alignAsTable": true,
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "rightSide": true,
+                        "show": false,
+                        "sort": "avg",
+                        "sortDesc": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": false,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(idelta(vault_route_count{method=~\"rollback\",  service=\"$vaultClusterName\"}[5m])) by (method, path)",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": " method :path",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Auth Rollback",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 2,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "collapsed": false,
+                      "datasource": "thanos-querier-k8s",
+                      "gridPos": {
+                        "h": 1,
+                        "w": 24,
+                        "x": 0,
+                        "y": 31
+                      },
+                      "id": 18,
+                      "panels": [],
+                      "title": "Policy",
+                      "type": "row"
+                    },
+                    {
+                      "aliasColors": {
+                        "set": "#629e51"
+                      },
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 12,
+                        "x": 0,
+                        "y": 32
+                      },
+                      "hiddenSeries": false,
+                      "id": 10,
+                      "legend": {
+                        "alignAsTable": false,
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(rate(vault_policy_set_policy_count{ service=\"$vaultClusterName\"} [1m]))",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "set",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Policy Set",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": "0",
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "aliasColors": {
+                        "GET": "#1f78c1"
+                      },
+                      "bars": false,
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fillGradient": 0,
+                      "gridPos": {
+                        "h": 6,
+                        "w": 12,
+                        "x": 12,
+                        "y": 32
+                      },
+                      "hiddenSeries": false,
+                      "id": 12,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null",
+                      "options": {
+                        "dataLinks": []
+                      },
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "targets": [
+                        {
+                          "expr": "sum(rate(vault_policy_get_policy_count{ service=\"$vaultClusterName\"} [1m]))",
+                          "format": "time_series",
+                          "interval": "",
+                          "intervalFactor": 1,
+                          "legendFormat": "GET",
+                          "refId": "A"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeRegions": [],
+                      "timeShift": null,
+                      "title": "Policy Get",
+                      "tooltip": {
+                        "shared": true,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "type": "graph",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "decimals": 0,
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": "0",
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": true
+                        }
+                      ],
+                      "yaxis": {
+                        "align": false,
+                        "alignLevel": null
+                      }
+                    },
+                    {
+                      "collapsed": false,
+                      "datasource": "thanos-querier-k8s",
+                      "gridPos": {
+                        "h": 1,
+                        "w": 24,
+                        "x": 0,
+                        "y": 38
+                      },
+                      "id": 43,
+                      "panels": [],
+                      "title": "System",
+                      "type": "row"
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": false,
+                      "columns": [],
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fontSize": "100%",
+                      "gridPos": {
+                        "h": 5,
+                        "w": 24,
+                        "x": 0,
+                        "y": 39
+                      },
+                      "id": 61,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null as zero",
+                      "pageSize": null,
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "showHeader": true,
+                      "sort": {
+                        "col": 0,
+                        "desc": true
+                      },
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "styles": [
+                        {
+                          "alias": "Time",
+                          "align": "auto",
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "pattern": "Time",
+                          "type": "hidden"
+                        },
+                        {
+                          "alias": "CPU Usage",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #A",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "alias": "CPU Requests",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #B",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "alias": "CPU Requests %",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #C",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "percentunit"
+                        },
+                        {
+                          "alias": "CPU Limits",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #D",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "alias": "CPU Limits %",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #E",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "percentunit"
+                        },
+                        {
+                          "alias": "Container",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "container",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "pattern": "/.*/",
+                          "thresholds": [],
+                          "type": "string",
+                          "unit": "short"
+                        }
+                      ],
+                      "targets": [
+                        {
+                          "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container!=\"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "A",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(kube_pod_container_resource_requests_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~ \"$vaultClusterName-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "B",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) / sum(kube_pod_container_resource_requests_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "C",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(kube_pod_container_resource_limits_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "D",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) / sum(kube_pod_container_resource_limits_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "E",
+                          "step": 10
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "CPU Quota",
+                      "tooltip": {
+                        "shared": false,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "transform": "table",
+                      "type": "table-old",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": 0,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": false
+                        }
+                      ]
+                    },
+                    {
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {},
+                          "mappings": [],
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "green",
+                                "value": null
+                              },
+                              {
+                                "color": "red",
+                                "value": 80
+                              },
+                              {
+                                "color": "#EAB839",
+                                "value": 90
+                              }
+                            ]
+                          },
+                          "unit": "percent"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 0,
+                        "y": 44
+                      },
+                      "id": 62,
+                      "options": {
+                        "orientation": "auto",
+                        "reduceOptions": {
+                          "calcs": [
+                            "mean"
+                          ],
+                          "fields": "",
+                          "values": false
+                        },
+                        "showThresholdLabels": false,
+                        "showThresholdMarkers": true
+                      },
+                      "pluginVersion": "7.0.3",
+                      "targets": [
+                        {
+                          "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) / sum(kube_pod_container_resource_requests_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) * 100",
+                          "interval": "",
+                          "legendFormat": "pod",
+                          "refId": "A"
+                        }
+                      ],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "CPU Requests %",
+                      "type": "gauge"
+                    },
+                    {
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {},
+                          "mappings": [],
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "green",
+                                "value": null
+                              },
+                              {
+                                "color": "red",
+                                "value": 80
+                              },
+                              {
+                                "color": "#EAB839",
+                                "value": 90
+                              }
+                            ]
+                          },
+                          "unit": "percent"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 12,
+                        "y": 44
+                      },
+                      "id": 63,
+                      "options": {
+                        "orientation": "auto",
+                        "reduceOptions": {
+                          "calcs": [
+                            "mean"
+                          ],
+                          "fields": "",
+                          "values": false
+                        },
+                        "showThresholdLabels": false,
+                        "showThresholdMarkers": true
+                      },
+                      "pluginVersion": "7.0.3",
+                      "targets": [
+                        {
+                          "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) / sum(kube_pod_container_resource_limits_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) *100",
+                          "interval": "",
+                          "legendFormat": "pod",
+                          "refId": "A"
+                        }
+                      ],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "CPU  Limits %",
+                      "type": "gauge"
+                    },
+                    {
+                      "aliasColors": {},
+                      "bars": false,
+                      "columns": [],
+                      "dashLength": 10,
+                      "dashes": false,
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {}
+                        },
+                        "overrides": []
+                      },
+                      "fill": 1,
+                      "fontSize": "100%",
+                      "gridPos": {
+                        "h": 5,
+                        "w": 24,
+                        "x": 0,
+                        "y": 52
+                      },
+                      "id": 52,
+                      "legend": {
+                        "avg": false,
+                        "current": false,
+                        "max": false,
+                        "min": false,
+                        "show": true,
+                        "total": false,
+                        "values": false
+                      },
+                      "lines": true,
+                      "linewidth": 1,
+                      "links": [],
+                      "nullPointMode": "null as zero",
+                      "pageSize": null,
+                      "percentage": false,
+                      "pointradius": 5,
+                      "points": false,
+                      "renderer": "flot",
+                      "seriesOverrides": [],
+                      "showHeader": true,
+                      "sort": {
+                        "col": 8,
+                        "desc": false
+                      },
+                      "spaceLength": 10,
+                      "stack": false,
+                      "steppedLine": false,
+                      "styles": [
+                        {
+                          "$$hashKey": "object:122",
+                          "alias": "Time",
+                          "align": "auto",
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "pattern": "Time",
+                          "type": "hidden"
+                        },
+                        {
+                          "$$hashKey": "object:123",
+                          "alias": "Memory Usage",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #A",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:124",
+                          "alias": "Memory Requests",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #B",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:125",
+                          "alias": "Memory Requests %",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #C",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "percentunit"
+                        },
+                        {
+                          "$$hashKey": "object:126",
+                          "alias": "Memory Limits",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #D",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:127",
+                          "alias": "Memory Limits %",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #E",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "percentunit"
+                        },
+                        {
+                          "$$hashKey": "object:128",
+                          "alias": "Memory Usage (RSS)",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #F",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:129",
+                          "alias": "Memory Usage (Cache)",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #G",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:130",
+                          "alias": "Memory Usage (Swap)",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #H",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "bytes"
+                        },
+                        {
+                          "$$hashKey": "object:131",
+                          "alias": "Memory Limit (%)",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "link": false,
+                          "linkTooltip": "Drill down",
+                          "linkUrl": "",
+                          "pattern": "Value #I",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1092",
+                          "alias": "Memory Resource Limit (%)",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "Value #J",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1103",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1114",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1125",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1136",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:1147",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [
+                            "rgba(245, 54, 54, 0.9)",
+                            "rgba(237, 129, 40, 0.89)",
+                            "rgba(50, 172, 45, 0.97)"
+                          ],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "mappingType": 1,
+                          "pattern": "",
+                          "thresholds": [],
+                          "type": "number",
+                          "unit": "short"
+                        },
+                        {
+                          "$$hashKey": "object:132",
+                          "alias": "",
+                          "align": "auto",
+                          "colorMode": null,
+                          "colors": [],
+                          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+                          "decimals": 2,
+                          "pattern": "/.*/",
+                          "thresholds": [],
+                          "type": "string",
+                          "unit": "short"
+                        }
+                      ],
+                      "targets": [
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{ namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "A",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(kube_pod_container_resource_requests_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "B",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"vault-operator\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_requests_memory_bytes{namespace=\"$namespace\", pod=~\"vault-raft-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "C",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(kube_pod_container_resource_limits_memory_bytes{namespace=\"vault-operator\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "D",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"vault-raft-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_limits_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "E",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_rss{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "F",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_cache{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "G",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_swap{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod)",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "intervalFactor": 2,
+                          "legendFormat": "",
+                          "refId": "H",
+                          "step": 10
+                        },
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_limits_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) * 100    ",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "legendFormat": "",
+                          "refId": "I"
+                        },
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_requests_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)  * 100",
+                          "format": "table",
+                          "instant": true,
+                          "interval": "",
+                          "legendFormat": "",
+                          "refId": "J"
+                        }
+                      ],
+                      "thresholds": [],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "Memory Quota Detailed ",
+                      "tooltip": {
+                        "shared": false,
+                        "sort": 0,
+                        "value_type": "individual"
+                      },
+                      "transform": "table",
+                      "type": "table-old",
+                      "xaxis": {
+                        "buckets": null,
+                        "mode": "time",
+                        "name": null,
+                        "show": true,
+                        "values": []
+                      },
+                      "yaxes": [
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": 0,
+                          "show": true
+                        },
+                        {
+                          "format": "short",
+                          "label": null,
+                          "logBase": 1,
+                          "max": null,
+                          "min": null,
+                          "show": false
+                        }
+                      ]
+                    },
+                    {
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {},
+                          "mappings": [],
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "green",
+                                "value": null
+                              },
+                              {
+                                "color": "red",
+                                "value": 80
+                              },
+                              {
+                                "color": "#EAB839",
+                                "value": 90
+                              }
+                            ]
+                          },
+                          "unit": "percent"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 0,
+                        "y": 57
+                      },
+                      "id": 54,
+                      "options": {
+                        "orientation": "auto",
+                        "reduceOptions": {
+                          "calcs": [
+                            "mean"
+                          ],
+                          "fields": "",
+                          "values": false
+                        },
+                        "showThresholdLabels": false,
+                        "showThresholdMarkers": true
+                      },
+                      "pluginVersion": "7.0.3",
+                      "targets": [
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_requests_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod)  * 100",
+                          "interval": "",
+                          "legendFormat": "pod",
+                          "refId": "A"
+                        }
+                      ],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "Memory Requests %",
+                      "type": "gauge"
+                    },
+                    {
+                      "datasource": "thanos-querier-k8s",
+                      "fieldConfig": {
+                        "defaults": {
+                          "custom": {},
+                          "mappings": [
+                            {
+                              "from": "",
+                              "id": 0,
+                              "operator": "",
+                              "text": "",
+                              "to": "",
+                              "type": 1
+                            }
+                          ],
+                          "max": 100,
+                          "thresholds": {
+                            "mode": "percentage",
+                            "steps": [
+                              {
+                                "color": "green",
+                                "value": null
+                              },
+                              {
+                                "color": "red",
+                                "value": 80
+                              },
+                              {
+                                "color": "#EAB839",
+                                "value": 90
+                              }
+                            ]
+                          },
+                          "unit": "percent"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 12,
+                        "y": 57
+                      },
+                      "id": 55,
+                      "options": {
+                        "orientation": "auto",
+                        "reduceOptions": {
+                          "calcs": [
+                            "mean"
+                          ],
+                          "fields": "",
+                          "values": false
+                        },
+                        "showThresholdLabels": false,
+                        "showThresholdMarkers": true
+                      },
+                      "pluginVersion": "7.0.3",
+                      "targets": [
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\", container != \"\", container != \"POD\"}) by (pod) / sum(kube_pod_container_resource_limits_memory_bytes{namespace=\"$namespace\", pod=~\"$vaultClusterName-[0-9]*\"}) by (pod) * 100",
+                          "instant": false,
+                          "interval": "",
+                          "intervalFactor": 3,
+                          "legendFormat": "pod",
+                          "refId": "A"
+                        }
+                      ],
+                      "timeFrom": null,
+                      "timeShift": null,
+                      "title": "Memory Limit %",
+                      "type": "gauge"
+                    }
+                  ],
+                  "refresh": false,
+                  "schemaVersion": 25,
+                  "style": "dark",
+                  "tags": [],
+                  "templating": {
+                    "list": [
+                      {
+                        "allValue": null,
+                        "current": {
+                          "selected": false,
+                          "text": "vault",
+                          "value": "vault"
+                        },
+                        "datasource": "thanos-querier-k8s",
+                        "definition": "label_values(vault_sys_sealed, namespace)",
+                        "hide": 0,
+                        "includeAll": false,
+                        "label": null,
+                        "multi": false,
+                        "name": "namespace",
+                        "options": [],
+                        "query": "label_values(vault_sys_sealed, namespace)",
+                        "refresh": 1,
+                        "regex": "/.*/",
+                        "skipUrlSync": false,
+                        "sort": 0,
+                        "tagValuesQuery": "",
+                        "tags": [],
+                        "tagsQuery": "",
+                        "type": "query",
+                        "useTags": false
+                      },
+                      {
+                        "allValue": null,
+                        "current": {
+                          "selected": false,
+                          "text": "vault",
+                          "value": "vault"
+                        },
+                        "datasource": "thanos-querier-k8s",
+                        "definition": "label_values(vault_sys_sealed{namespace=\"$namespace\"}, service)",
+                        "hide": 0,
+                        "includeAll": false,
+                        "label": null,
+                        "multi": false,
+                        "name": "vaultClusterName",
+                        "options": [],
+                        "query": "label_values(vault_sys_sealed{namespace=\"$namespace\"}, service)",
+                        "refresh": 1,
+                        "regex": "",
+                        "skipUrlSync": false,
+                        "sort": 0,
+                        "tagValuesQuery": "",
+                        "tags": [],
+                        "tagsQuery": "",
+                        "type": "query",
+                        "useTags": false
+                      },
+                      {
+                        "allValue": null,
+                        "current": {
+                          "isNone": true,
+                          "selected": false,
+                          "text": "None",
+                          "value": ""
+                        },
+                        "datasource": "thanos-querier-k8s",
+                        "definition": "label_values(kube_pod_info, cluster)",
+                        "hide": 2,
+                        "includeAll": false,
+                        "label": null,
+                        "multi": false,
+                        "name": "cluster",
+                        "options": [],
+                        "query": "label_values(kube_pod_info, cluster)",
+                        "refresh": 1,
+                        "regex": "",
+                        "skipUrlSync": false,
+                        "sort": 0,
+                        "tagValuesQuery": "",
+                        "tags": [],
+                        "tagsQuery": "",
+                        "type": "query",
+                        "useTags": false
+                      }
+                    ]
+                  },
+                  "time": {
+                    "from": "now-15m",
+                    "to": "now"
+                  },
+                  "timepicker": {
+                    "refresh_intervals": [
+                      "10s",
+                      "30s",
+                      "1m",
+                      "5m",
+                      "15m",
+                      "30m",
+                      "1h",
+                      "2h",
+                      "1d"
+                    ],
+                    "time_options": [
+                      "5m",
+                      "15m",
+                      "1h",
+                      "6h",
+                      "12h",
+                      "24h",
+                      "2d",
+                      "7d",
+                      "30d"
+                    ]
+                  },
+                  "timezone": "",
+                  "title": "Vaults - Advatys",
+                  "uid": "zPZeZemMz",
+                  "version": 1
+                }
+                
+                        #   
+          #     gnetId: 2
+          #     revision: 2
+          #     datasource: Prometheus
+          #   local-dashboard:
+          #     url: https://example.com/repository/test.json
+          #   local-dashboard-base64:
+          #     url: https://example.com/repository/test-b64.json
+          #     b64content: true
+        
+        ## Reference to external ConfigMap per provider. Use provider name as key and ConfiMap name as value.
+        ## A provider dashboards must be defined either by external ConfigMaps or in values.yaml, not in both.
+        ## ConfigMap data example:
+        ##
+        ## data:
+        ##   example-dashboard.json: |
+        ##     RAW_JSON
+        ##
+        dashboardsConfigMaps: {}
+        #  default: ""
+        
+        ## Grafana's primary configuration
+        ## NOTE: values in map will be converted to ini format
+        ## ref: http://docs.grafana.org/installation/configuration/
+        ##
+        grafana.ini:
+          paths:
+            data: /var/lib/grafana/data
+            logs: /var/log/grafana
+            plugins: /var/lib/grafana/plugins
+            provisioning: /etc/grafana/provisioning
+          analytics:
+            check_for_updates: true
+          log:
+            mode: console
+          grafana_net:
+            url: https://grafana.net
+        ## grafana Authentication can be enabled with the following values on grafana.ini
+         # server:
+              # The full public facing url you use in browser, used for redirects and emails
+         #    root_url:
+         # https://grafana.com/docs/grafana/latest/auth/github/#enable-github-in-grafana
+         # auth.github:
+         #    enabled: false
+         #    allow_sign_up: false
+         #    scopes: user:email,read:org
+         #    auth_url: https://github.com/login/oauth/authorize
+         #    token_url: https://github.com/login/oauth/access_token
+         #    api_url: https://github.com/user
+         #    team_ids:
+         #    allowed_organizations:
+         #    client_id:
+         #    client_secret:
+        ## LDAP Authentication can be enabled with the following values on grafana.ini
+        ## NOTE: Grafana will fail to start if the value for ldap.toml is invalid
+          # auth.ldap:
+          #   enabled: true
+          #   allow_sign_up: true
+          #   config_file: /etc/grafana/ldap.toml
+        
+        ## Grafana's LDAP configuration
+        ## Templated by the template in _helpers.tpl
+        ## NOTE: To enable the grafana.ini must be configured with auth.ldap.enabled
+        ## ref: http://docs.grafana.org/installation/configuration/#auth-ldap
+        ## ref: http://docs.grafana.org/installation/ldap/#configuration
+        ldap:
+          enabled: false
+          # `existingSecret` is a reference to an existing secret containing the ldap configuration
+          # for Grafana in a key `ldap-toml`.
+          existingSecret: ""
+          # `config` is the content of `ldap.toml` that will be stored in the created secret
+          config: ""
+          # config: |-
+          #   verbose_logging = true
+        
+          #   [[servers]]
+          #   host = "my-ldap-server"
+          #   port = 636
+          #   use_ssl = true
+          #   start_tls = false
+          #   ssl_skip_verify = false
+          #   bind_dn = "uid=%s,ou=users,dc=myorg,dc=com"
+        
+        ## Grafana's SMTP configuration
+        ## NOTE: To enable, grafana.ini must be configured with smtp.enabled
+        ## ref: http://docs.grafana.org/installation/configuration/#smtp
+        smtp:
+          # `existingSecret` is a reference to an existing secret containing the smtp configuration
+          # for Grafana.
+          existingSecret: ""
+          userKey: "user"
+          passwordKey: "password"
+        
+        ## Sidecars that collect the configmaps with specified label and stores the included files them into the respective folders
+        ## Requires at least Grafana 5 to work and can't be used together with parameters dashboardProviders, datasources and dashboards
+        sidecar:
+          image:
+            repository: kiwigrid/k8s-sidecar
+            tag: 0.1.151
+          imagePullPolicy: IfNotPresent
+          resources: {}
+        #   limits:
+        #     cpu: 100m
+        #     memory: 100Mi
+        #   requests:
+        #     cpu: 50m
+        #     memory: 50Mi
+          # skipTlsVerify Set to true to skip tls verification for kube api calls
+          # skipTlsVerify: true
+          dashboards:
+            enabled: false
+            SCProvider: true
+            # label that the configmaps with dashboards are marked with
+            label: grafana_dashboard
+            # folder in the pod that should hold the collected dashboards (unless `defaultFolderName` is set)
+            folder: /tmp/dashboards
+            # The default folder name, it will create a subfolder under the `folder` and put dashboards in there instead
+            defaultFolderName: null
+            # If specified, the sidecar will search for dashboard config-maps inside this namespace.
+            # Otherwise the namespace in which the sidecar is running will be used.
+            # It's also possible to specify ALL to search in all namespaces
+            searchNamespace: null
+            # provider configuration that lets grafana manage the dashboards
+            provider:
+              # name of the provider, should be unique
+              name: sidecarProvider
+              # orgid as configured in grafana
+              orgid: 1
+              # folder in which the dashboards should be imported in grafana
+              folder: ''
+              # type of the provider
+              type: file
+              # disableDelete to activate a import-only behaviour
+              disableDelete: false
+              # allow updating provisioned dashboards from the UI
+              allowUiUpdates: false
+          datasources:
+            enabled: false
+            # label that the configmaps with datasources are marked with
+            label: grafana_datasource
+            # If specified, the sidecar will search for datasource config-maps inside this namespace.
+            # Otherwise the namespace in which the sidecar is running will be used.
+            # It's also possible to specify ALL to search in all namespaces
+            searchNamespace: null
+        
+        ## Override the deployment namespace
+        ##
+        namespaceOverride: ""
