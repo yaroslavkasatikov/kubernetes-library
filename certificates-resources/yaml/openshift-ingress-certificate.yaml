@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openshift-ingress-certificate
+  namespace: openshift-ingress
+spec:
+  # Secret names are always required.
+  secretName: apps-certificate
+  duration: 720h 
+  renewBefore: 360h 
+  subject:
+    organizations:
+    - advatys
+  commonName: '*.apps.hub.gcp.aws-openshift.club'
+  dnsNames:
+  - "*.apps.hub.gcp.aws-openshift.club"
+  issuerRef:
+    name: vault-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

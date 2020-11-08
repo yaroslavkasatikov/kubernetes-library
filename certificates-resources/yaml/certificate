@@ -1,0 +1,24 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apps-gcp-aws-openshift-club1
+  namespace: default
+spec:
+  # Secret names are always required.
+  secretName: aps-gcp-com-tls
+  duration: 720h # 90d
+  renewBefore: 360h # 15d
+  subject:
+    organizations:
+    - advatys
+  commonName: 'test1.hub.gcp.aws-openshift.club'
+  dnsNames:
+  - "test1.hub.gcp.aws-openshift.club"
+  issuerRef:
+    name: vault-issuer
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: ClusterIssuer
+    # This is optional since cert-manager will default to this value however
+    # if you are using an external issuer, change this to that issuer group.
+    group: cert-manager.io
